@@ -4,6 +4,12 @@ softdepend:
   - "PlaceholderAPI"
   - "HeadDatabase"
   - "ProtocolLib"
+  - "ProtocolLib"
+  - "ProtocolSupport"
+  - "ViaVersion"
+  - "ViaBackwards"
+  - "ViaRewind"
+  - "Geyser-Spigot"
 name: "DecentHolograms"
 description: ${description}
 version: ${version}

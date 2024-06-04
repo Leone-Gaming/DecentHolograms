@@ -1,5 +1,7 @@
 package eu.decentsoftware.holograms.api;
 
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import eu.decentsoftware.holograms.api.animations.AnimationManager;
 import eu.decentsoftware.holograms.api.commands.CommandManager;
 import eu.decentsoftware.holograms.api.features.FeatureManager;
@@ -18,8 +20,13 @@ import eu.decentsoftware.holograms.api.utils.event.EventFactory;
 import eu.decentsoftware.holograms.api.utils.reflect.Version;
 import eu.decentsoftware.holograms.api.utils.tick.Ticker;
 import eu.decentsoftware.holograms.event.DecentHologramsReloadEvent;
+import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import lombok.Getter;
 import lombok.NonNull;
+import me.tofaa.entitylib.APIConfig;
+import me.tofaa.entitylib.EntityLib;
+import me.tofaa.entitylib.spigot.SpigotEntityLibPlatform;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.SingleLineChart;
 import org.bukkit.Bukkit;
@@ -41,6 +48,8 @@ import java.util.logging.Logger;
 @Getter
 public final class DecentHolograms {
 
+    private static DecentHolograms instance;
+
     private final JavaPlugin plugin;
     private HologramManager hologramManager;
     private CommandManager commandManager;
@@ -49,6 +58,11 @@ public final class DecentHolograms {
     private PacketListener packetListener;
     private Ticker ticker;
     private boolean updateAvailable;
+
+    private final LegacyComponentSerializer legacyComponentSerializer = LegacyComponentSerializer.builder()
+            .useUnusualXRepeatedCharacterHexFormat()
+            .hexColors()
+            .build();
 
     /*
      *	Constructors
@@ -63,12 +77,21 @@ public final class DecentHolograms {
      */
 
     void load() {
+        instance = this;
+
         // Check if NMS version is supported
         if (Version.CURRENT == null) {
             Log.error("Unsupported server version: %s", Bukkit.getServer().getVersion());
             Log.error("Plugin will be disabled.");
             Bukkit.getPluginManager().disablePlugin(plugin);
         }
+
+        PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this.getPlugin()));
+        PacketEvents.getAPI().getSettings()
+                .reEncodeByDefault(false)
+                .checkForUpdates(true)
+                .bStats(true);
+        PacketEvents.getAPI().load();
     }
 
     void enable() {
@@ -76,6 +99,13 @@ public final class DecentHolograms {
         Settings.reload();
         Lang.reload();
         DExecutor.init(3);
+
+        PacketEvents.getAPI().init();
+        SpigotEntityLibPlatform platform = new SpigotEntityLibPlatform(this.getPlugin());
+        APIConfig settings = new APIConfig(PacketEvents.getAPI())
+                .usePlatformLogger();
+
+        EntityLib.init(platform, settings);
 
         this.ticker = new Ticker();
         this.hologramManager = new HologramManager(this);
@@ -120,6 +150,7 @@ public final class DecentHolograms {
 
         BungeeUtils.destroy();
         DExecutor.shutdownNow();
+        PacketEvents.getAPI().terminate();
     }
 
     /**
@@ -146,6 +177,10 @@ public final class DecentHolograms {
     @Contract(pure = true)
     public Logger getLogger() {
         return plugin.getLogger();
+    }
+
+    public static DecentHolograms getInstance() {
+        return instance;
     }
 
 }

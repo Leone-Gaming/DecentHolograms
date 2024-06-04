@@ -1,5 +1,12 @@
 package eu.decentsoftware.holograms.api.holograms;
 
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.PacketEventsAPI;
+import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
+import com.github.retrooper.packetevents.protocol.player.ClientVersion;
+import com.github.retrooper.packetevents.protocol.player.User;
+import com.github.retrooper.packetevents.util.Vector3d;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
 import com.google.common.util.concurrent.AtomicDouble;
 import eu.decentsoftware.holograms.api.DecentHolograms;
 import eu.decentsoftware.holograms.api.DecentHologramsAPI;
@@ -18,6 +25,13 @@ import eu.decentsoftware.holograms.api.utils.reflect.Version;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import me.tofaa.entitylib.EntityLib;
+import me.tofaa.entitylib.meta.EntityMeta;
+import me.tofaa.entitylib.meta.Metadata;
+import me.tofaa.entitylib.meta.display.AbstractDisplayMeta;
+import me.tofaa.entitylib.meta.display.TextDisplayMeta;
+import me.tofaa.entitylib.wrapper.WrapperEntity;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.configuration.ConfigurationSection;
@@ -27,15 +41,12 @@ import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
+
+import static me.tofaa.entitylib.meta.EntityMeta.getConverter;
 
 @Getter
 @Setter
@@ -416,8 +427,19 @@ public class HologramLine extends HologramObject {
             if (!isVisible(player) && canShow(player) && isInDisplayRange(player)) {
                 switch (type) {
                     case TEXT:
-                        nms.showFakeEntityArmorStand(player, getLocation(), entityIds[0], true, true, false);
-                        nms.updateFakeEntityCustomName(player, getText(player, true), entityIds[0]);
+                        if (!shouldUseDisplays(player)) {
+                            nms.showFakeEntityArmorStand(player, getLocation(), entityIds[0], true, true, false);
+                            nms.updateFakeEntityCustomName(player, getText(player, true), entityIds[0]);
+                        } else {
+                            final User user = PacketEvents.getAPI().getPlayerManager().getUser(player);
+
+                            final Vector3d position = new Vector3d(getLocation().getX(), getLocation().getY() + 0.40625f, getLocation().getZ());
+                            final WrapperPlayServerSpawnEntity packet = new WrapperPlayServerSpawnEntity(entityIds[0], Optional.of(UUID.randomUUID()),
+                                    EntityTypes.TEXT_DISPLAY, position, 0f, 0f, 0f, 0, Optional.empty());
+                            user.sendPacket(packet);
+
+                            updateTextDisplay(player, getText(player, true), entityIds[0]);
+                        }
                         break;
                     case HEAD:
                     case SMALLHEAD:
@@ -470,7 +492,12 @@ public class HologramLine extends HologramObject {
                 String updatedText = getText(player, true);
                 if (!updatedText.equals(lastText)) {
                     lastTextMap.put(uuid, updatedText);
-                    nms.updateFakeEntityCustomName(player, updatedText, entityIds[0]);
+
+                    if (!shouldUseDisplays(player)) {
+                        nms.updateFakeEntityCustomName(player, updatedText, entityIds[0]);
+                    } else {
+                        updateTextDisplay(player, updatedText, entityIds[0]);
+                    }
                 }
             } else if ((type == HologramLineType.HEAD || type == HologramLineType.SMALLHEAD) && containsPlaceholders) {
                 nms.helmetFakeEntity(player, HologramItem.parseItemStack(getItem().getContent(), player), entityIds[0]);
@@ -512,7 +539,12 @@ public class HologramLine extends HologramObject {
             String updatedText = getText(player, false);
             if (!updatedText.equals(lastText)) {
                 lastTextMap.put(uuid, updatedText);
-                nms.updateFakeEntityCustomName(player, updatedText, entityIds[0]);
+
+                if (!shouldUseDisplays(player)) {
+                    nms.updateFakeEntityCustomName(player, updatedText, entityIds[0]);
+                } else {
+                    updateTextDisplay(player, updatedText, entityIds[0]);
+                }
             }
         }
     }
@@ -528,6 +560,11 @@ public class HologramLine extends HologramObject {
             NMS.getInstance().hideFakeEntities(player, entityIds[0], entityIds[1]);
             viewers.remove(player.getUniqueId());
         }
+    }
+
+    public boolean shouldUseDisplays(Player player) {
+        final ClientVersion version = PacketEvents.getAPI().getPlayerManager().getClientVersion(player);
+        return version.isNewerThanOrEquals(ClientVersion.V_1_19_4);
     }
 
     public boolean isInDisplayRange(@NonNull Player player) {
@@ -575,6 +612,25 @@ public class HologramLine extends HologramObject {
     @Override
     public boolean canShow(@NonNull Player player) {
         return super.canShow(player) && (parent == null || parent.getParent().canShow(player));
+    }
+
+    private @NotNull EntityMeta createMeta(int entityId, com.github.retrooper.packetevents.protocol.entity.type.EntityType entityType) {
+        Metadata metadata = new Metadata(entityId);
+        BiFunction<Integer, Metadata, EntityMeta> converter = getConverter(entityType);
+        EntityMeta entityMeta = converter.apply(entityId, metadata);
+        return entityMeta;
+    }
+
+    private void updateTextDisplay(Player player, String text, int entityId) {
+        final User user = PacketEvents.getAPI().getPlayerManager().getUser(player);
+        final TextDisplayMeta meta = (TextDisplayMeta) createMeta(entityId, EntityTypes.TEXT_DISPLAY);
+        final Component component = DecentHolograms.getInstance().getLegacyComponentSerializer().deserialize(text);
+
+        meta.setText(component);
+        meta.setLineWidth(6 * text.length());
+        meta.setBillboardConstraints(AbstractDisplayMeta.BillboardConstraints.VERTICAL);
+
+        user.sendPacket(meta.createPacket());
     }
 
 }
