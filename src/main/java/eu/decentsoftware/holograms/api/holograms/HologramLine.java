@@ -629,6 +629,8 @@ public class HologramLine extends HologramObject {
         meta.setText(component);
         meta.setLineWidth(6 * text.length());
         meta.setBillboardConstraints(AbstractDisplayMeta.BillboardConstraints.VERTICAL);
+        meta.setBackgroundColor(0);
+        meta.setShadow(true);
 
         user.sendPacket(meta.createPacket());
     }
