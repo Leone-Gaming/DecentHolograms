@@ -32,8 +32,8 @@ dependencies {
     compileOnly 'org.jetbrains:annotations:24.1.0'
     annotationProcessor 'org.jetbrains:annotations:24.1.0'
 
-    implementation 'com.github.retrooper:packetevents-spigot:2.4.0'
-    implementation 'com.github.Tofaa2.EntityLib:spigot:2.4.9-SNAPSHOT'
+    implementation 'com.github.retrooper:packetevents-spigot:2.7.0'
+    implementation 'com.github.Tofaa2.EntityLib:spigot:2.4.11'
     implementation 'net.kyori:adventure-text-serializer-legacy:4.17.0'
 
     compileOnly "org.spigotmc:spigot:1.13-R0.1-SNAPSHOT"
@@ -103,9 +103,4 @@ shadowJar {
     relocate "com.github.retrooper", "eu.decentsoftware.holograms.libs.packetevents.api"
     relocate "io.github.retrooper.packetevents", "eu.decentsoftware.holograms.libs.packetevents.impl"
     relocate "net.kyori", "eu.decentsoftware.holograms.libs.kyori"
-
-    create("shadow", MavenPublication) {
-        from(components["java"] as SoftwareComponent)
-        artifactId = "decentholograms"
-    }
 }
