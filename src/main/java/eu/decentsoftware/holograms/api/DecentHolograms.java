@@ -116,7 +116,7 @@ public final class DecentHolograms {
 
         PluginManager pm = Bukkit.getPluginManager();
         pm.registerEvents(new PlayerListener(this), this.plugin);
-        pm.registerEvents(new WorldListener(this), this.plugin);
+        pm.registerEvents(new WorldListener(hologramManager), this.plugin);
 
         // Setup metrics
         Metrics metrics = new Metrics(this.plugin, 12797);

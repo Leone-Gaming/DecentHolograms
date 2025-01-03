@@ -1,9 +1,12 @@
 package eu.decentsoftware.holograms.api.utils.items;
 
-import de.tr7zw.changeme.nbtapi.NBTItem;
+import de.tr7zw.changeme.nbtapi.NBT;
+import de.tr7zw.changeme.nbtapi.iface.ReadWriteNBT;
+import de.tr7zw.changeme.nbtapi.utils.DataFixerUtil;
 import eu.decentsoftware.holograms.api.utils.HeadDatabaseUtils;
 import eu.decentsoftware.holograms.api.utils.Log;
 import eu.decentsoftware.holograms.api.utils.PAPI;
+import eu.decentsoftware.holograms.api.utils.reflect.Version;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.apache.commons.lang.StringUtils;
@@ -21,7 +24,7 @@ import java.util.Map;
 @AllArgsConstructor
 public class HologramItem {
 
-    public static final String ENCHANTED_INDICATOR = "!ENCHANTED";
+    private static final String ENCHANTED_INDICATOR = "!ENCHANTED";
     private final String content;
     private String nbt;
     private String extras;
@@ -58,13 +61,13 @@ public class HologramItem {
             }
 
             if (enchanted) {
-                itemBuilder.withUnsafeEnchantment(Enchantment.DURABILITY, 0);
+                itemBuilder.withUnsafeEnchantment(Enchantment.DURABILITY, 1);
             }
 
             ItemStack itemStack = itemBuilder.toItemStack();
 
             if (nbt != null) {
-                applyNBT(player, itemStack);
+                itemStack = applyNBT(player, itemStack);
             }
 
             return itemStack;
@@ -84,11 +87,40 @@ public class HologramItem {
     }
 
     @SuppressWarnings("deprecation")
-    private void applyNBT(Player player, ItemStack itemStack) {
-        try {
-            Bukkit.getUnsafe().modifyItemStack(itemStack, player == null ? nbt : PAPI.setPlaceholders(player, nbt));
-        } catch (Exception e) {
-            Log.warn("Failed to apply NBT tag to item: %s", e, nbt);
+    private ItemStack applyNBT(Player player, ItemStack itemStack){
+        if (Version.afterOrEqual(Version.v1_20_R4)) {
+            ReadWriteNBT originalNBT = NBT.itemStackToNBT(itemStack); // Used later for merge.
+            ReadWriteNBT modifiableNBT = NBT.itemStackToNBT(itemStack);
+            modifiableNBT.getOrCreateCompound("tag")
+                .mergeCompound(NBT.parseNBT(player == null ? nbt : PAPI.setPlaceholders(player, nbt)));
+            try{
+                /*
+                 * DataFixerUtil has an issue where it expects to find "Count", due to expecting pre-1.20.5 NBT data,
+                 * but since we used a 1.20.5+ ItemStack to create the NBT is there only "count", which causes
+                 * DataFixerUtil to not find a valid NBT and does nothing.
+                 * This addition fixes that issue.
+                 */
+                modifiableNBT.setByte("Count", (byte) 1);
+                modifiableNBT = DataFixerUtil.fixUpItemData(modifiableNBT, DataFixerUtil.VERSION1_20_4, DataFixerUtil.getCurrentVersion());
+                /*
+                 * Updating the NBT removes the modern NBT variants of enchants and alike, as Datafixer discards them.
+                 * So we have to manually merge them in again... Not pretty, but it does the job.
+                 */
+                modifiableNBT.mergeCompound(originalNBT);
+
+                return NBT.itemStackFromNBT(modifiableNBT);
+            } catch (NoSuchFieldException | IllegalAccessException ex) {
+                Log.warn("Failed to apply NBT Data to Item: %s", ex, nbt);
+                return itemStack;
+            }
+        } else {
+            try {
+                Bukkit.getUnsafe().modifyItemStack(itemStack, nbt);
+            } catch (Exception ex) {
+                Log.warn("Failed to apply NBT Data to Item: %s", ex, nbt);
+            }
+
+            return itemStack;
         }
     }
 
@@ -150,7 +182,25 @@ public class HologramItem {
         }
         return string;
     }
-
+    
+    /**
+     * Takes the provided ItemStack and converts it into a usable HologramItem instance.<br>
+     * This is done by converting the ItemStack values into a String equal to what is used when adding an Item to
+     * a Hologram Page (i.e. {@code PLAYER_HEAD (Steve)} or {@code DIAMOND_SWORD !ENCHANTED}.
+     * 
+     * <p><b>IMPORTANT NOTE!</b><br>
+     * Due to limitations in the parsing does this method only use specific values, namely:
+     * <ul>
+     *     <li>Item name</li>
+     *     <li>Item Durability (Will be added after the Name with a colon separation)</li>
+     *     <li>Enchantments (Will add {@value ENCHANTED_INDICATOR})</li>
+     *     <li>Skull Owner/Texture (Texture is prioritized)</li>
+     *     <li>CustomModelData (custom_model_data on newer MC versions).</li>
+     * </ul>
+     * 
+     * @param itemStack The Item to convert into a HologramItem.
+     * @return Usable HologramItem instance with data from the provided ItemStack.
+     */
     @SuppressWarnings("deprecation")
     public static HologramItem fromItemStack(ItemStack itemStack) {
         Validate.notNull(itemStack);
@@ -177,10 +227,21 @@ public class HologramItem {
                 stringBuilder.append("(").append(owner).append(")");
             }
         }
-        NBTItem nbtItem = new NBTItem(itemStack);
-        if (nbtItem.hasTag("CustomModelData")) {
-            int customModelData = nbtItem.getInteger("CustomModelData");
-            stringBuilder.append(" {CustomModelData:").append(customModelData).append("}");
+
+        ReadWriteNBT nbtItem = NBT.itemStackToNBT(itemStack);
+        int customModelData;
+        if (Version.afterOrEqual(Version.v1_20_R4)) {
+            // components contains item tags in 1.20.5+
+            customModelData = nbtItem.getOrCreateCompound("components")
+                .getInteger("minecraft:custom_model_data");
+        } else {
+            // 1.20.4 and older have CMD under "tag".
+            customModelData = nbtItem.getOrCreateCompound("tag")
+                .getInteger("CustomModelData");
+        }
+
+        if (customModelData > 0) {
+            stringBuilder.append("{CustomModelData:").append(customModelData).append('}');
         }
         return new HologramItem(stringBuilder.toString());
     }

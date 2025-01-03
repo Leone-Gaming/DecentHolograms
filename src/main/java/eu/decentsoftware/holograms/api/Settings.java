@@ -42,6 +42,28 @@ public class Settings {
     public static int DEFAULT_LRU_CACHE_SIZE = 500;
     @Key("allow-placeholders-inside-animations")
     public static boolean ALLOW_PLACEHOLDERS_INSIDE_ANIMATIONS = false;
+    /**
+     * If true, the visibility of holograms will be updated when a player gets teleported or respawned.
+     *
+     * <p>By default, this is disabled because it causes visual glitches where even if a player gets teleported
+     * by a fraction of a block, the holograms still disappear and reappear for them.</p>
+     *
+     * <p>Some clients (or client versions?) need this though, so if someone is experiencing issues with holograms
+     * not showing up after a player gets teleported or respawned, they can enable this setting.</p>
+     *
+     * @since 2.8.9
+     */
+    @Key("update-visibility-on-teleport")
+    public static boolean UPDATE_VISIBILITY_ON_TELEPORT = false;
+    /**
+     * Set this to true if you want holograms to appear at the player's eye level.
+     *
+     * <p>When enabled, holograms will be positioned at the player's eye height when created or moved.</p>
+     *
+     * <p>When disabled, holograms will be positioned at the player's feet height when created or moved (default).</p>
+     */
+    @Key("holograms-eye-level-positioning")
+    public static boolean HOLOGRAMS_EYE_LEVEL_POSITIONING = false;
 
     public static Map<String, String> CUSTOM_REPLACEMENTS = ImmutableMap.<String, String>builder()
             .put("[x]", "\u2588")
